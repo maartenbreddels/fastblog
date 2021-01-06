@@ -1,1 +1,1 @@
-Sitemap: https://maartenbreddels.com/fastblog/sitemap.xml
+Sitemap: https://maartenbreddels.com/sitemap.xml
