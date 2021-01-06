@@ -8,7 +8,7 @@
       "page1": {
           "title": "About Me",
           "content": "This website is powered by fastpages 1. . a blogging platform that natively supports Jupyter notebooks in addition to other formats. &#8617; . |",
-          "url": "https://maartenbreddels.com/about/",
+          "url": "https://www.maartenbreddels.com/about/",
           "relUrl": "/about/",
           "date": ""
       }
@@ -21,7 +21,7 @@
       ,"page3": {
           "title": "Projects",
           "content": "These are the software projects I work on, or have contributed to significantly. . Vaex .",
-          "url": "https://maartenbreddels.com/projects/",
+          "url": "https://www.maartenbreddels.com/projects/",
           "relUrl": "/projects/",
           "date": ""
       }
@@ -51,7 +51,7 @@
       ,"page11": {
           "title": "",
           "content": "Sitemap: {{ “sitemap.xml” | absolute_url }} | .",
-          "url": "https://maartenbreddels.com/robots.txt",
+          "url": "https://www.maartenbreddels.com/robots.txt",
           "relUrl": "/robots.txt",
           "date": ""
       }
