@@ -162,10 +162,10 @@ window.onload = wrap_img;
 <a class="anchor" href="#Why-the-GIL-matters" aria-hidden="true"><span class="octicon octicon-link"></span></a>Why the GIL matters<a class="anchor-link" href="#Why-the-GIL-matters"> </a>
 </h1>
 <p>There are plenty of articles explaining why the Python GIL (The Global Interpreter Lock) exists<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>, and why it is there. The TLDR version is: the GIL prevents multithreaded pure Python code from using multiple CPU cores.</p>
-<p>However, in <a href="https://vaex.io">Vaex</a> we execute most of the CPU intensive parts in C (C++) code, where we release the GIL. This is a common practice in high performance Python libraries, where Python acts merely as a high level glue.</p>
-<p>However, the GIL needs to be released explicitly, and this is the responsibility of the programmer, and might be forgotten, leading to suboptimal use of your machine.</p>
-<p>I recently had this issue in <a href="https://github.com/vaexio/vaex/pull/1114">Vaex</a> where I simply forgot to release the GIL, and found a similar issue in <a href="https://github.com/apache/arrow/pull/7756">Apache Arrow</a><sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup>.</p>
-<p>Also, when running on 64 cores, I sometimes see a performance in Vaex that I am not happy with. It might be using 4000% CPU, instead of 6400% CPU, which is something I am not happy with. Instead of blindly pulling some levers to inspect the effect, I want to understand what is happening, and if the GIL is the problem, why and where is it holding Vaex down.</p>
+<p>However, in <a href="https://vaex.io">Vaex</a> we execute most of the CPU intensive parts in C (C++) code, where we release the GIL. This is a common practice in high-performance Python libraries, where Python acts merely as a high-level glue.</p>
+<p>However, the GIL needs to be released explicitly, and this is the responsibility of the programmer and might be forgotten, leading to suboptimal use of your machine.</p>
+<p>I recently had this issue in <a href="https://github.com/vaexio/vaex/pull/1114">Vaex</a> where I simply forgot to release the GIL and found a similar issue in <a href="https://github.com/apache/arrow/pull/7756">Apache Arrow</a><sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup>.</p>
+<p>Also, when running on 64 cores, I sometimes see a performance in Vaex that I am not happy with. It might be using 4000% CPU, instead of 6400% CPU, which is something I am not happy with. Instead of blindly pulling some levers to inspect the effect, I want to understand what is happening, and if the GIL is the problem, why, and where is it holding Vaex down.</p>
 <div class="footnotes">
 <hr>
 <ol>
@@ -183,8 +183,8 @@ window.onload = wrap_img;
 <h1 id="Why-I-write-this">
 <a class="anchor" href="#Why-I-write-this" aria-hidden="true"><span class="octicon octicon-link"></span></a>Why I write this<a class="anchor-link" href="#Why-I-write-this"> </a>
 </h1>
-<p>I'm planning to write a series of articles explaining some tools and techniques available for profiling/tracing {would be nice to say of what}, and how they can be glued together, to analyze and visualize what Python is doing, and when the GIL it taken or dropped.</p>
-<p>I hope this leads to improvement of tracing, profiling and other performance tooling in the Python ecosystem, and the performance of the whole Python ecosystem.</p>
+<p>I'm planning to write a series of articles explaining some tools and techniques available for profiling/tracing Python together with native extensions, and how these tools can be glued together, to analyze and visualize what Python is doing, and when the GIL it taken or dropped.</p>
+<p>I hope this leads to improvement of tracing, profiling, and other performance tooling in the Python ecosystem, and the performance of the whole Python ecosystem.</p>
 <h1 id="Prerequisites">
 <a class="anchor" href="#Prerequisites" aria-hidden="true"><span class="octicon octicon-link"></span></a>Prerequisites<a class="anchor-link" href="#Prerequisites"> </a>
 </h1>
@@ -195,7 +195,7 @@ window.onload = wrap_img;
 <h2 id="Perf">
 <a class="anchor" href="#Perf" aria-hidden="true"><span class="octicon octicon-link"></span></a>Perf<a class="anchor-link" href="#Perf"> </a>
 </h2>
-<p>Make sure you have perf installed, e.g. on ubuntu:</p>
+<p>Make sure you have perf installed, e.g. on Ubuntu:</p>
 
 <pre><code>$ sudo yum install perf</code></pre>
 <h2 id="Kernel-configuration">
@@ -214,7 +214,7 @@ $ sudo mount -o remount,mode=755 /sys/kernel/debug/tracing</code></pre>
 </h2>
 <p>We will make use of <a href="https://github.com/gaogaotiantian/viztracer/">VizTracer</a> and <a href="https://github.com/maartenbreddels/per4m">per4m</a></p>
 
-<pre><code>$ pip install viztracer per4m</code></pre>
+<pre><code>$ pip install "viztracer&gt;0.11.1" "per4m&gt;=0.1,&lt;0.2"</code></pre>
 
 </div>
 </div>
@@ -225,13 +225,13 @@ $ sudo mount -o remount,mode=755 /sys/kernel/debug/tracing</code></pre>
 <h1 id="Track-thread-or-process-states-via-perf">
 <a class="anchor" href="#Track-thread-or-process-states-via-perf" aria-hidden="true"><span class="octicon octicon-link"></span></a>Track thread or process states via perf<a class="anchor-link" href="#Track-thread-or-process-states-via-perf"> </a>
 </h1>
-<p>There is no way to get the GIL state in Python <sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>, since there is no API for this. We can track it from the kernel, and the right tool for this under Linux is <strong>perf</strong>.</p>
+<p>There is no way to get the GIL state in Python <sup class="footnote-ref" id="fnref-3"><a href="#fn-3">1</a></sup> since there is no API for this. We can track it from the kernel, and the right tool for this under Linux is <strong>perf</strong>.</p>
 <p>Using the linux perf tool (aka perf_events), we can listen to the state changes for processes/threads (we only care about sleeping and running), and log them. Although perf may look scary, it is a powerful tool. If you want to know a bit more about perf, I recommend reading <a href="https://jvns.ca/blog/2018/04/16/new-perf-zine/">Julia Evans' zine on perf</a> or <a href="http://www.brendangregg.com/perf.html">go through Brendan Gregg's website</a>.</p>
 <p>To build our intuition, we will first run perf on a <a href="https://github.com/maartenbreddels/per4m/blob/master/per4m/example0.py">very trivial program</a>:</p>
 <div class="footnotes">
 <hr>
 <ol>
-<li id="fn-1"><p>Except using polling <a href="https://github.com/chrisjbillington/gil_load/">https://github.com/chrisjbillington/gil_load/</a><a href="#fnref-1" class="footnote">↩</a></p></li>
+<li id="fn-3"><p>Except using polling <a href="https://github.com/chrisjbillington/gil_load/">https://github.com/chrisjbillington/gil_load/</a><a href="#fnref-3" class="footnote">↩</a></p></li>
 </ol>
 </div>
 
@@ -274,71 +274,14 @@ $ sudo mount -o remount,mode=755 /sys/kernel/debug/tracing</code></pre>
 <div class="text_cell_render border-box-sizing rendered_html">
 <p>We listen to just a few events to keep the noise down (note the use of wildcards):</p>
 
-</div>
-</div>
-</div>
-    
-    
-<div class="cell border-box-sizing code_cell rendered">
-<div class="input">
-
-<div class="inner_cell">
-    <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="o">!</span>perf record -e sched:sched_switch  -e sched:sched_process_fork <span class="err">\</span>
-        <span class="o">-</span><span class="n">e</span> <span class="s1">'sched:sched_wak*'</span> <span class="o">--</span> <span class="n">python</span> <span class="o">-</span><span class="n">m</span> <span class="n">per4m</span><span class="o">.</span><span class="n">example0</span>
-</pre></div>
-
-    </div>
-</div>
-</div>
-
-<div class="output_wrapper">
-<div class="output">
-
-<div class="output_area">
-
-<div class="output_subarea output_stream output_stdout output_text">
-<pre>[ perf record: Woken up 2 times to write data ]
-[ perf record: Captured and wrote 0,032 MB perf.data (33 samples) ]
-</pre>
-</div>
-</div>
-
-</div>
-</div>
-
-</div>
-    
-
-<div class="cell border-box-sizing text_cell rendered">
-<div class="inner_cell">
-<div class="text_cell_render border-box-sizing rendered_html">
+<pre><code>$ perf record -e sched:sched_switch  -e sched:sched_process_fork \
+        -e 'sched:sched_wak*' -- python -m per4m.example0
+[ perf record: Woken up 2 times to write data ]
+[ perf record: Captured and wrote 0,032 MB perf.data (33 samples) ]</code></pre>
 <p>And use the <code>perf script</code> command to write human/parsable output.</p>
 
-</div>
-</div>
-</div>
-    
-    
-<div class="cell border-box-sizing code_cell rendered">
-<div class="input">
-
-<div class="inner_cell">
-    <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="o">!</span>perf script
-</pre></div>
-
-    </div>
-</div>
-</div>
-
-<div class="output_wrapper">
-<div class="output">
-
-<div class="output_area">
-
-<div class="output_subarea output_stream output_stdout output_text">
-<pre>        :3040108 3040108 [032] 5563910.979408:                sched:sched_waking: comm=perf pid=3040114 prio=120 target_cpu=031
+<pre><code>$ perf script
+        :3040108 3040108 [032] 5563910.979408:                sched:sched_waking: comm=perf pid=3040114 prio=120 target_cpu=031
         :3040108 3040108 [032] 5563910.979431:                sched:sched_wakeup: comm=perf pid=3040114 prio=120 target_cpu=031
           python 3040114 [031] 5563910.995616:                sched:sched_waking: comm=kworker/31:1 pid=2502104 prio=120 target_cpu=031
           python 3040114 [031] 5563910.995618:                sched:sched_wakeup: comm=kworker/31:1 pid=2502104 prio=120 target_cpu=031
@@ -370,21 +313,15 @@ $ sudo mount -o remount,mode=755 /sys/kernel/debug/tracing</code></pre>
          swapper     0 [037] 5563912.113529:                sched:sched_wakeup: comm=python pid=3040116 prio=120 target_cpu=037
           python 3040116 [037] 5563912.113595:                sched:sched_waking: comm=python pid=3040114 prio=120 target_cpu=031
           python 3040116 [037] 5563912.113620:                sched:sched_waking: comm=python pid=3040114 prio=120 target_cpu=031
-         swapper     0 [031] 5563912.113697:                sched:sched_wakeup: comm=python pid=3040114 prio=120 target_cpu=031
-</pre>
-</div>
-</div>
+         swapper     0 [031] 5563912.113697:                sched:sched_wakeup: comm=python pid=3040114 prio=120 target_cpu=031</code></pre>
 
 </div>
 </div>
-
 </div>
-    
-
 <div class="cell border-box-sizing text_cell rendered">
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>Take a moment to digest the output. I can see a few things. Looking at the 4th column (time in seconds), we can see where the program slept (it skips 1 second). We see that we enter the sleeping state with a line like:</p>
+<p>Take a moment to digest the output. I can see a few things. Looking at the 4th column (time in seconds), we can see where the program slept (it skips 1 second). Here we see that we enter the sleeping state with a line like:</p>
 <p><code>python 3040114 [031] 5563911.112513:                sched:sched_switch: prev_comm=python prev_pid=3040114 prev_prio=120 prev_state=S ==&gt; next_comm=swapper/31 next_pid=0 next_prio=120</code></p>
 <p>This means the kernel changed the state of the Python thread to <code>S</code> (=sleeping) state.</p>
 <p>A full second later, we see it being woken up:</p>
@@ -400,7 +337,7 @@ $ sudo mount -o remount,mode=755 /sys/kernel/debug/tracing</code></pre>
 <h1 id="VizTracer">
 <a class="anchor" href="#VizTracer" aria-hidden="true"><span class="octicon octicon-link"></span></a>VizTracer<a class="anchor-link" href="#VizTracer"> </a>
 </h1>
-<p><a href="https://github.com/gaogaotiantian/viztracer/">VizTracer</a> is a Python tracer that can visualize what your program does in the browser. Lets run it first to see what is looks like by run it on a slightly <a href="https://github.com/maartenbreddels/per4m/blob/master/per4m/example1.py">more advanced example</a>:</p>
+<p><a href="https://github.com/gaogaotiantian/viztracer/">VizTracer</a> is a Python tracer that can visualize what your program does in the browser. Let us run it on a slightly <a href="https://github.com/maartenbreddels/per4m/blob/master/per4m/example1.py">more advanced example</a> to see what it looks like.</p>
 
 </div>
 </div>
@@ -448,15 +385,15 @@ $ sudo mount -o remount,mode=755 /sys/kernel/debug/tracing</code></pre>
 <div class="text_cell_render border-box-sizing rendered_html">
 <p>Running viztracer gives output like:</p>
 
-<pre><code>$ viztracer -o example1.html per4m/example1.py
+<pre><code>$ viztracer -o example1.html --ignore_frozen -m per4m.example1
 Loading finish                                        
 Saving report to /home/maartenbreddels/github/maartenbreddels/per4m/example1.html ...
 Dumping trace data to json, total entries: 94, estimated json file size: 11.0KiB
 Generating HTML report
 Report saved.</code></pre>
-<p>And the html should render as:
+<p>And the HTML should render as:
 <img src="/images/copied_from_nb/per4m/example1.png" alt="image.png"></p>
-<p>From this, it seems that <code>some_computation</code> seem to be executed in parallel (twice), while in fact we know the GIL is preventing that. So what is really going on?</p>
+<p>From this, it seems that <code>some_computation</code> seem to be executed in parallel (twice), while in fact, we know the GIL is preventing that. So what is really going on?</p>
 
 </div>
 </div>
@@ -467,10 +404,10 @@ Report saved.</code></pre>
 <h1 id="Mixing-VizTracer-and-perf-output">
 <a class="anchor" href="#Mixing-VizTracer-and-perf-output" aria-hidden="true"><span class="octicon octicon-link"></span></a>Mixing VizTracer and perf output<a class="anchor-link" href="#Mixing-VizTracer-and-perf-output"> </a>
 </h1>
-<p>Lets run <code>perf</code> on this, similarly to what we did to example0.py. However, we add the argument <code>-k CLOCK_MONOTONIC</code> so that we use <a href="https://github.com/gaogaotiantian/viztracer/blob/3321ba4024afe5623f938a601d7f7db3b08f534d/src/viztracer/modules/snaptrace.c#L91">the same clock as VizTracer</a> and ask VizTracer to generate a JSON, instead of an HTML file:</p>
+<p>Let us run <code>perf</code> on this, similarly to what we did to example0.py. However, we add the argument <code>-k CLOCK_MONOTONIC</code> so that we use <a href="https://github.com/gaogaotiantian/viztracer/blob/3321ba4024afe5623f938a601d7f7db3b08f534d/src/viztracer/modules/snaptrace.c#L91">the same clock as VizTracer</a> and ask VizTracer to generate a JSON, instead of an HTML file:</p>
 
 <pre><code>$ perf record -e sched:sched_switch  -e sched:sched_process_fork -e 'sched:sched_wak*' \
-   -k CLOCK_MONOTONIC  -- -o viztracer1.json per4m/example1.py</code></pre>
+   -k CLOCK_MONOTONIC  -- viztracer -o viztracer1.json --ignore_frozen -m per4m.example1</code></pre>
 <p>Then we use <code>per4m</code> to translate the perf script results into a JSON that VizTracer can read</p>
 
 <pre><code>$ perf script | per4m perf2trace sched -o perf1.json
@@ -484,7 +421,7 @@ Generating HTML report
 Report saved.</code></pre>
 <p>This gives us:
 <img src="/images/copied_from_nb/per4m/example1-state.png" alt="image.png"></p>
-<p>From this visualization, it is clear the threads regularly enter a sleeping state, and do not execute in parallel.
+<p>From this visualization, it is clear the threads regularly enter a sleeping state due to the GIL and do not execute in parallel.
 </p>
 <div class="flash">
     <svg class="octicon octicon-info" viewbox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path fill-rule="evenodd" d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM0 8a8 8 0 1116 0A8 8 0 010 8zm6.5-.25A.75.75 0 017.25 7h1a.75.75 0 01.75.75v2.75h.25a.75.75 0 010 1.5h-2a.75.75 0 010-1.5h.25v-2h-.25a.75.75 0 01-.75-.75zM8 6a1 1 0 100-2 1 1 0 000 2z"></path></svg>
@@ -500,14 +437,14 @@ Report saved.</code></pre>
 <h1 id="Detecting-the-GIL">
 <a class="anchor" href="#Detecting-the-GIL" aria-hidden="true"><span class="octicon octicon-link"></span></a>Detecting the GIL<a class="anchor-link" href="#Detecting-the-GIL"> </a>
 </h1>
-<p>We see our process sleeping, but we do not see any difference between the sleep state being triggered by calling <code>time.sleep</code> and due to the GIL. There are multiple way to see the difference, and we will present two methods.</p>
+<p>We see our process sleeping, but we do not see any difference between the sleeping state being triggered by calling <code>time.sleep</code> and due to the GIL. There are multiple way to see the difference, and we will present two methods.</p>
 <h2 id="Via-stack-traces">
 <a class="anchor" href="#Via-stack-traces" aria-hidden="true"><span class="octicon octicon-link"></span></a>Via stack traces<a class="anchor-link" href="#Via-stack-traces"> </a>
 </h2>
 <p>Using <code>perf record -g</code> (or better <code>perf record --call-graph dwarf</code> which implies <code>-g</code>), we get stack traces for each event of perf.</p>
 
 <pre><code>$ perf record -e sched:sched_switch  -e sched:sched_process_fork -e 'sched:sched_wak*'\
-   -k CLOCK_MONOTONIC  --call-graph dwarf -- viztracer  -o viztracer2-gil.json per4m/example2.py
+   -k CLOCK_MONOTONIC  --call-graph dwarf -- viztracer -o viztracer1-gil.json --ignore_frozen -m per4m.example1
 Loading finish                                        
 Saving report to /home/maartenbreddels/github/maartenbreddels/per4m/viztracer1-gil.json ...
 Dumping trace data to json, total entries: 94, estimated json file size: 11.0KiB
@@ -581,7 +518,11 @@ viztracer 3306851 [059] 5614683.022539:                sched:sched_switch: prev_
     <svg class="octicon octicon-info octicon octicon-info" viewbox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path fill-rule="evenodd" d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM0 8a8 8 0 1116 0A8 8 0 010 8zm6.5-.25A.75.75 0 017.25 7h1a.75.75 0 01.75.75v2.75h.25a.75.75 0 010 1.5h-2a.75.75 0 010-1.5h.25v-2h-.25a.75.75 0 01-.75-.75zM8 6a1 1 0 100-2 1 1 0 000 2z"></path></svg>
     <strong>Note: </strong>We also see that <code>pthread_cond_timedwait</code> is called, this is what <a href="https://github.com/sumerc/gilstats.py">https://github.com/sumerc/gilstats.py</a> uses for a eBPF tool, in case you are interested in other mutexes.
 </div>
-The <code>per4m perf2trace</code> convert tool understands this, and will generate a different output when <code>take_gil</code> is in the stacktrace:
+<div class="flash">
+    <svg class="octicon octicon-info octicon octicon-info octicon octicon-info" viewbox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path fill-rule="evenodd" d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM0 8a8 8 0 1116 0A8 8 0 010 8zm6.5-.25A.75.75 0 017.25 7h1a.75.75 0 01.75.75v2.75h.25a.75.75 0 010 1.5h-2a.75.75 0 010-1.5h.25v-2h-.25a.75.75 0 01-.75-.75zM8 6a1 1 0 100-2 1 1 0 000 2z"></path></svg>
+    <strong>Note: </strong>Also note that we do not see Python stacktrace, but <code>_PyEval_EvalFrameDefault</code> etcetera instead. I plan to write how to inject Python stacktraces in a future article.
+</div>
+<p>The <code>per4m perf2trace</code> convert tool understands this and will generate different output when <code>take_gil</code> is in the stacktrace:</p>
 
 <pre><code>$ perf script | per4m perf2trace sched -o perf1-gil.json
 Wrote to perf1-gil.json
@@ -590,7 +531,7 @@ Saving report to /home/maartenbreddels/github/maartenbreddels/per4m/example1.htm
 Dumping trace data to json, total entries: 131, estimated json file size: 15.4KiB
 Generating HTML report
 Report saved.</code></pre>
-<p>Which gives us:
+<p>This gives us:
 <img src="/images/copied_from_nb/per4m/example1-gil.png" alt="image.png"></p>
 <p>Now we really see where the GIL plays a role!</p>
 
@@ -644,20 +585,25 @@ Added new event:
 You can now use it in all perf tools, such as:
 
         perf record -e python:drop_gil__return -aR sleep 1</code></pre>
-<p>It complains a bit, and seems to add multiple probes/events because <code>drop_gil</code> and <code>take_gil</code> are inlined (which means the function is present multiple times in the binary), but it seem to work 🤷 (let me know in the comments if it does not work for you).</p>
-<p>Note that the probes cause no performance hit, only when they are 'active' (like when we monitor them under perf) {unclear what is happening when they are active}. When monitored, the affected pages for the monitored process will be copied, and <a href="https://lwn.net/Articles/499190/">breakpoints are inserted at the right locations</a> (int3 for x86 cpus). In case you want to remove the probes, run:</p>
+<p>It complains a bit and seems to add multiple probes/events because <code>drop_gil</code> and <code>take_gil</code> are inlined (which means the function is present multiple times in the binary), but it seems to work 🤷 (let me know in the comments if it does not work for you).
+</p>
+<div class="flash">
+    <svg class="octicon octicon-info octicon octicon-info octicon octicon-info octicon octicon-info" viewbox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path fill-rule="evenodd" d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM0 8a8 8 0 1116 0A8 8 0 010 8zm6.5-.25A.75.75 0 017.25 7h1a.75.75 0 01.75.75v2.75h.25a.75.75 0 010 1.5h-2a.75.75 0 010-1.5h.25v-2h-.25a.75.75 0 01-.75-.75zM8 6a1 1 0 100-2 1 1 0 000 2z"></path></svg>
+    <strong>Note: </strong>I may have been lucky, that the Python binary that I use (from conda-forge) is compiled in such a way that the relevant take_gil/drop_gil (and its return) that succeed are the relevant ones for this problem.
+</div>
+<p>Note that the probes cause no performance hit, only when they are 'active' (like when we monitor them under perf) will the trigger a different code path. When monitored, the affected pages for the monitored process will be copied, and <a href="https://lwn.net/Articles/499190/">breakpoints are inserted at the right locations</a> (INT3 for x86 CPUs). The breakpoint will trigger the event for perf, which causes a small overhead. In case you want to remove the probes, run:</p>
 
 <pre><code>$ sudo perf probe --del 'python*'</code></pre>
 <p>Now <code>perf</code> understand new events that it can listen to, so let us run perf again with <code>-e 'python:*gil*'</code> as extra argument</p>
 
 <pre><code>$ perf record -e sched:sched_switch  -e sched:sched_process_fork -e 'sched:sched_wak*' -k CLOCK_MONOTONIC  \
-  -e 'python:*gil*' -- viztracer  -o viztracer1-uprobes.json per4m/example1.py</code></pre>
+  -e 'python:*gil*' -- viztracer  -o viztracer1-uprobes.json --ignore_frozen -m per4m.example1</code></pre>
 <p></p>
 <div class="flash">
-    <svg class="octicon octicon-info octicon octicon-info octicon octicon-info" viewbox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path fill-rule="evenodd" d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM0 8a8 8 0 1116 0A8 8 0 010 8zm6.5-.25A.75.75 0 017.25 7h1a.75.75 0 01.75.75v2.75h.25a.75.75 0 010 1.5h-2a.75.75 0 010-1.5h.25v-2h-.25a.75.75 0 01-.75-.75zM8 6a1 1 0 100-2 1 1 0 000 2z"></path></svg>
+    <svg class="octicon octicon-info octicon octicon-info octicon octicon-info octicon octicon-info octicon octicon-info" viewbox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path fill-rule="evenodd" d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM0 8a8 8 0 1116 0A8 8 0 010 8zm6.5-.25A.75.75 0 017.25 7h1a.75.75 0 01.75.75v2.75h.25a.75.75 0 010 1.5h-2a.75.75 0 010-1.5h.25v-2h-.25a.75.75 0 01-.75-.75zM8 6a1 1 0 100-2 1 1 0 000 2z"></path></svg>
     <strong>Note: </strong>we removed <code>--call-graph dwarf</code> otherwise perf cannot keep up, and we will lose events.
 </div>
-<p>We then use <code>per4m perf2trace</code> to convert this to a JSON that VizTracer understand, while we also get some free statistics.</p>
+<p>We then use <code>per4m perf2trace</code> to convert this to a JSON that VizTracer understands, while we also get some free statistics.</p>
 
 <pre><code>$ perf script --no-inline | per4m perf2trace gil -o perf1-uprobes.json
 ...
@@ -674,7 +620,7 @@ High 'no gil' is good (✅), we like low 'has gil' (❗),
 ... 
 Wrote to perf1-uprobes.json</code></pre>
 <p>Note that the <code>per4m perf2trace gil</code> subcommand also gives a <a href="https://github.com/chrisjbillington/gil_load">gil_load</a> like output. From this output, we see that both threads are waiting for the GIL approximately 50% of the time, as expected.</p>
-<p>Using the same perf.data file, that <code>perf record</code> generate, we can also generate the thread/process state information. However, because we ran without the stacktraces, we do not know if we are sleeping due to the GIL or not.</p>
+<p>Using the same <code>perf.data</code> file, that <code>perf record</code> generated, we can also generate the thread/process state information. However, because we ran without the stacktraces, we do not know if we are sleeping due to the GIL or not.</p>
 
 <pre><code>$ perf script --no-inline | per4m perf2trace sched -o perf1-state.json
 Wrote to perf1-state.json</code></pre>
@@ -687,7 +633,7 @@ Generating HTML report
 Report saved.</code></pre>
 <p>Our VizTracer output gives us a good overview of who has, and wants the GIL:
 <img src="/images/copied_from_nb/per4m/example1-uprobes.png" alt="image.png"></p>
-<p>Above each thread we see when a thread/process wants to take the gil, and when it succeeded (marked by <code>LOCK</code>). Note that these periods overlap with the periods when the thread/process is <em>not</em> sleeping (so running!). Also note that we see only 1 thread/process in the running state, as expected due to the GIL.</p>
+<p>Above each thread, we see when a thread/process wants to take the gil, and when it succeeded (marked by <code>LOCK</code>). Note that these periods overlap with the periods when the thread/process is <em>not</em> sleeping (so running!). Also note that we see only 1 thread/process in the running state, as expected due to the GIL.</p>
 <p>The time between each call to <code>take_gil</code>, and actually obtaining the lock (and thus leaving the sleeping state, or waking up), is exactly the time in the above table in the column <code>gil wait%❌</code>. The time each thread has the GIL, or the time spanned by <code>LOCK</code>, is the time in the column <code>has gil%❗</code>.</p>
 
 </div>
@@ -699,7 +645,7 @@ Report saved.</code></pre>
 <h1 id="Releasing-the-Kraken...-ehm-GIL">
 <a class="anchor" href="#Releasing-the-Kraken...-ehm-GIL" aria-hidden="true"><span class="octicon octicon-link"></span></a>Releasing the Kraken... ehm GIL<a class="anchor-link" href="#Releasing-the-Kraken...-ehm-GIL"> </a>
 </h1>
-<p>We saw a pure Python programming, running multithreaded, where the GIL is limiting performance by letting only 1 thread/process run at a time <sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>. Lets now see what happens when the code releases the GIL, such as what happens when we execute NumPy functions.</p>
+<p>We saw a pure Python program, running multithreaded, where the GIL is limiting performance by letting only 1 thread/process run at a time <sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>. Let us now see what happens when the code releases the GIL, such as what happens when we execute NumPy functions.</p>
 <p>The second example execute <code>some_numpy_computation</code>, which calls a NumPy function <code>M=4</code> times, in parallel using 2 threads, while the main thread executes pure Python code.</p>
 <div class="footnotes">
 <hr>
@@ -758,7 +704,7 @@ Report saved.</code></pre>
 <div class="cell border-box-sizing text_cell rendered">
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<p>Instead of running this script using perf and viztracer, we now use the per4m <code>giltracer</code> util, which automates all the steps done above (in a slightly smarter way<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>):</p>
+<p>Instead of running this script using perf and VizTracer, we now use the per4m <code>giltracer</code> util, which automates all the steps done above (in a slightly smarter way<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>):</p>
 
 <pre><code>$ giltracer --state-detect -o example2-uprobes.html -m per4m.example2
 ...
@@ -777,7 +723,7 @@ High 'no gil' is good (✅), we like low 'has gil' (❗),
 Saving report to /home/maartenbreddels/github/maartenbreddels/per4m/example2-uprobes.html ...
 ...</code></pre>
 <p><img src="/images/copied_from_nb/per4m/example2-uprobes.png" alt="image.png"></p>
-<p>We see that while the main thread is running Python code (it has the GIL, indicated by the <code>LOCK</code> above it), the threads are also running. Note that in the pure Python example we only had one thread/process running at a time. While here we see moments where 3 threads are truely running parallel). This is possible because the NumPy routines that enter into C/C++/Fortran, released the GIL.</p>
+<p>We see that while the main thread is running Python code (it has the GIL, indicated by the <code>LOCK</code> above it), the threads are also running. Note that in the pure Python example we only had one thread/process running at a time. While here we see moments where 3 threads are truly running parallel). This is possible because the NumPy routines that enter into C/C++/Fortran, released the GIL.</p>
 <p>However, the threads are still hampered by the GIL, since once the NumPy function returns to Python land, it needs to obtain the GIL again as can be seen by the <code>take_gil</code> blocks taking a bit of time. This causes a 10% wait time for each thread.</p>
 <div class="footnotes">
 <hr>
@@ -893,13 +839,13 @@ Report saved.
 <h1 id="Conclusion">
 <a class="anchor" href="#Conclusion" aria-hidden="true"><span class="octicon octicon-link"></span></a>Conclusion<a class="anchor-link" href="#Conclusion"> </a>
 </h1>
-<p>Using perf, we can detect process/thread states which gives us an idea which thread/process has the GIL in Python. Using stack traces, we can find out if the sleeping states are really due to the GIL, and not due to <code>time.sleep</code> for instance.</p>
-<p>Combining uprobes, we can trace the calling and returning of the <code>take_gil</code> and <code>drop_gil</code> functions, getting an even better view on the effect of the GIL on your Python program.</p>
+<p>Using perf, we can detect process/thread states which gives us an idea which thread/process has the GIL in Python. Using stacktraces, we can find out if the sleeping states are really due to the GIL, and not due to <code>time.sleep</code> for instance.</p>
+<p>Combining uprobes with perf, we can trace the calling and returning of the <code>take_gil</code> and <code>drop_gil</code> functions, getting an even better view on the effect of the GIL on your Python program.</p>
 <p>The <code>per4m</code> Python package, is an experimental package to do some of the <code>perf script</code> to VizTracer JSON format, and some orchestration tools to make this easier to work with.</p>
 <h1 id="Future-plans">
 <a class="anchor" href="#Future-plans" aria-hidden="true"><span class="octicon octicon-link"></span></a>Future plans<a class="anchor-link" href="#Future-plans"> </a>
 </h1>
-<p>I wish I did not have to develop these tools, and hope I inspire other to build better tooling, that will deprecate mine. I want to write high performance code, and focus on that.</p>
+<p>I wish I did not have to develop these tools, and hope I inspire other to build better tooling, that will deprecate mine. I want to write high-performance code, and focus on that.</p>
 <p>However, I do see some options that I plan to write about in the future:</p>
 <ul>
 <li>Expose hardware performance counter in VizTracer, to see for instance cache misses, or CPU stalling.</li>
@@ -913,7 +859,7 @@ Report saved.
 <p>If you have other ideas, want to pick some of this up, leave a message or contact me.
 </p>
 <div class="flash">
-    <svg class="octicon octicon-info octicon octicon-info octicon octicon-info octicon octicon-info" viewbox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path fill-rule="evenodd" d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM0 8a8 8 0 1116 0A8 8 0 010 8zm6.5-.25A.75.75 0 017.25 7h1a.75.75 0 01.75.75v2.75h.25a.75.75 0 010 1.5h-2a.75.75 0 010-1.5h.25v-2h-.25a.75.75 0 01-.75-.75zM8 6a1 1 0 100-2 1 1 0 000 2z"></path></svg>
+    <svg class="octicon octicon-info octicon octicon-info octicon octicon-info octicon octicon-info octicon octicon-info octicon octicon-info" viewbox="0 0 16 16" version="1.1" width="16" height="16" aria-hidden="true"><path fill-rule="evenodd" d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM0 8a8 8 0 1116 0A8 8 0 010 8zm6.5-.25A.75.75 0 017.25 7h1a.75.75 0 01.75.75v2.75h.25a.75.75 0 010 1.5h-2a.75.75 0 010-1.5h.25v-2h-.25a.75.75 0 01-.75-.75zM8 6a1 1 0 100-2 1 1 0 000 2z"></path></svg>
     <strong>Note: </strong><a href="https://github.com/maartenbreddels/per4m">https://github.com/maartenbreddels/per4m</a> is under a permissive MIT license, feel free to make use of that!
 </div>
 
